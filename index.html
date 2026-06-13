@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cy-fur Game</title>
+    <link rel="icon" type="image/png" href="assets/logo 1.png">
+    <link rel="stylesheet" href="style.css">
+    <script src="three.min.js"></script>
+    <!-- Firebase (compat) SDKs for optional leaderboard/storage. Paste your config and initialize below. -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
+
+    <script>
+        // Firebase initialization (compat) - paste your config here
+        const firebaseConfig = {
+            apiKey: "AIzaSyBtMu4okCEX_Qpx2qm6CcXFX10nBazz1Rg",
+            authDomain: "cygem-6ea65.firebaseapp.com",
+            projectId: "cygem-6ea65",
+            storageBucket: "cygem-6ea65.firebasestorage.app",
+            messagingSenderId: "138080383831",
+            appId: "1:138080383831:web:1f1faf0a6b3d5b3d6a4412",
+            measurementId: "G-DTZT3P2TPC"
+        };
+
+        try {
+            if (!window.firebase || !firebase.initializeApp) throw new Error('Firebase compat not loaded');
+            firebase.initializeApp(firebaseConfig);
+            if (firebase.analytics) {
+                try { firebase.analytics(); } catch (e) { console.warn('Analytics init failed', e); }
+            }
+        } catch (e) {
+            console.warn('Firebase init skipped:', e);
+        }
+    </script>
+    
+    <!-- Game Modules -->
+    <script src="constants.js"></script>
+    <script src="candy3d-renderer.js"></script>
+    <script src="board.js"></script>
+    <script src="game-rules.js"></script>
+    <script src="special-candies.js"></script>
+    <script src="music-manager.js"></script>
+    <script src="notification-manager.js"></script>
+    <script src="ui-manager.js"></script>
+    <script src="game-handler.js"></script>
+    <script src="game.js"></script>
+</head>
+<body>
+    <!-- Background Music -->
+    <audio id="backgroundMusic" src="assets/background.mp3" preload="auto"></audio>
+
+    <div class="game-bg" aria-hidden="true">
+        <div class="bg-gradient"></div>
+        <div class="orbs">
+            <div class="orb orb1"></div>
+            <div class="orb orb2"></div>
+            <div class="orb orb3"></div>
+            <div class="orb orb4"></div>
+            <div class="orb orb5"></div>
+            <div class="orb orb6"></div>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+    
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-content">
+            <img src="assets/logo.png" alt="Cy-fur" class="loading-logo">
+            <h2>Cy-fur</h2>
+            <p class="powered-by">Powered by BOlex</p>
+            <div class="loading-bar">
+                <div class="loading-progress" id="loadingProgress"></div>
+            </div>
+            <p class="loading-text">Loading game...</p>
+        </div>
+    </div>
+
+    <!-- Result Screen -->
+    <div id="resultScreen" class="result-screen">
+        <div class="result-backdrop"></div>
+        <div class="result-modal">
+            <h2 id="resultTitle">Game Over!</h2>
+            <img id="resultImage" src="assets/game-over.png" alt="Game Over" class="result-image">
+            <div class="result-stats">
+                <div class="result-stat">
+                    <span class="result-label">Final Score</span>
+                    <span class="result-value" id="resultScore">0</span>
+                </div>
+                <div class="result-stat">
+                    <span class="result-label">Best Score</span>
+                    <span class="result-value" id="resultBest">0</span>
+                </div>
+            </div>
+            <p id="resultMessage" class="result-message"></p>
+            <div class="result-buttons">
+                <button type="button" class="btn-new" onclick="game.showModes()">Menu</button>
+                <button type="button" class="btn-new" onclick="game.playAgain()">Play Again</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1><img src="assets/logo.png" alt="Cy-fur" class="logo"> Cy-fur</h1>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px;">
+            <div id="playerNameDisplay" style="color:#8b5a3c; font-size:0.95em; font-weight:700;"></div>
+            <button type="button" id="stopBtn" class="stop-btn" onclick="game.stopGame()" style="display:none; padding: 6px 12px; background: linear-gradient(180deg, #d63031 0%, #b82828 100%); color: white; border: 2px solid #8b1a1a; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.85em; box-shadow: 0 4px 8px rgba(214, 48, 49, 0.3);">⏹️ Stop Game</button>
+        </div>
+        
+        <!-- Settings Button -->
+        <button type="button" class="settings-btn" onclick="game.toggleSettings(event)">⚙️</button>
+        
+        <!-- Connect Wallet Button -->
+        <button type="button" class="wallet-btn" id="walletBtn" onclick="game.toggleWallet(event)">💳 Connect Wallet</button>
+
+        <!-- Wallet Modal -->
+        <div id="walletModal" class="wallet-modal" style="display: none;">
+            <div class="wallet-backdrop" onclick="game.toggleWallet(event)"></div>
+            <div class="wallet-content">
+                <h3>Connect Wallet</h3>
+                <div id="walletStatus" class="wallet-status"></div>
+                <div class="wallet-options">
+                    <button type="button" class="wallet-option-btn" onclick="game.connectMetaMask()">
+                        <span class="wallet-icon">🦊</span>
+                        <span class="wallet-name">MetaMask</span>
+                    </button>
+                    <button type="button" class="wallet-option-btn" onclick="game.connectWalletConnect()">
+                        <span class="wallet-icon">🔗</span>
+                        <span class="wallet-name">WalletConnect</span>
+                    </button>
+                </div>
+                <div id="walletAddress" class="wallet-address" style="display: none;"></div>
+                <button type="button" class="wallet-close" onclick="game.toggleWallet(event)">✕</button>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settingsModal" class="settings-modal" style="display: none;">
+            <div class="settings-backdrop" onclick="game.toggleSettings(event)"></div>
+            <div class="settings-content">
+                <h3>Settings</h3>
+                <div class="settings-option">
+                    <button type="button" id="musicToggle" class="music-toggle" onclick="game.musicManager.toggleMusic(event)">🔊 Music: ON</button>
+                </div>
+                <div class="settings-option">
+                    <label for="playerNameInput">Player Name</label>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input id="playerNameInput" type="text" placeholder="Enter your name" style="flex:1; padding:6px; border-radius:6px; border:1px solid #ccc;" />
+                        <button id="savePlayerNameBtn" type="button" class="btn-new">Save</button>
+                    </div>
+                </div>
+                <div class="settings-option">
+                    <button type="button" class="wallet-btn" id="walletBtnSettings" onclick="document.getElementById('walletOptionsSettings').style.display = document.getElementById('walletOptionsSettings').style.display === 'none' ? 'flex' : 'none'">💳 Connect Wallet</button>
+                    <div id="walletOptionsSettings" class="wallet-options" style="display: none; flex-direction: column; gap: 15px; margin-top: 15px;">
+                        <div id="walletStatusSettings" class="wallet-status"></div>
+                        <button type="button" class="wallet-option-btn" onclick="game.connectMetaMask()">
+                            <span class="wallet-icon">🦊</span>
+                            <span class="wallet-name">MetaMask</span>
+                        </button>
+                        <button type="button" class="wallet-option-btn" onclick="game.connectWalletConnect()">
+                            <span class="wallet-icon">🔗</span>
+                            <span class="wallet-name">WalletConnect</span>
+                        </button>
+                        <div id="walletAddressSettings" class="wallet-address" style="display: none;"></div>
+                    </div>
+                </div>
+                <button type="button" class="settings-close" onclick="game.toggleSettings(event)">✕</button>
+            </div>
+        </div>
+        
+        <!-- Mode Selection Screen -->
+        <div id="modeScreen" class="mode-screen">
+            <p class="mode-title">Select Game Mode</p>
+            <div class="mode-buttons">
+                <button type="button" class="mode-btn" onclick="game.selectMode('classic')">
+                    <div class="mode-name">♾️ Infinity Mode</div>
+                    <div class="mode-desc">Unlimited Moves</div>
+                </button>
+                <button type="button" class="mode-btn" onclick="game.selectMode('timeAttack')">
+                    <div class="mode-name">⏱️ Time Attack</div>
+                    <div class="mode-desc">60 Seconds</div>
+                </button>
+                <button type="button" class="mode-btn" onclick="game.selectMode('goalMode')">
+                    <div class="mode-name">🎯 Goal Mode</div>
+                    <div class="mode-desc">Choose your level</div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Goal Level Selection Screen -->
+        <div id="goalSelectScreen" class="goal-select-screen" style="display:none;">
+            <p class="mode-title">Goal Mode Ladder</p>
+            <div class="cultivation-path-vertical">
+                <svg id="cultivationPathVertical" viewBox="0 0 200 1400" preserveAspectRatio="xMidYMid slice">
+                    <defs>
+                        <filter id="glowVertical">
+                            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                            <feMerge>
+                                <feMergeNode in="coloredBlur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                        </filter>
+                    </defs>
+                    <!-- Grass and trees decoration -->
+                    <g id="grassDecoration">
+                        <!-- Left side grass tufts -->
+                        <circle cx="20" cy="100" r="8" fill="#6bcf7f" opacity="0.7"/>
+                        <circle cx="15" cy="200" r="7" fill="#5ab86b" opacity="0.6"/>
+                        <circle cx="25" cy="350" r="9" fill="#6bcf7f" opacity="0.7"/>
+                        <circle cx="18" cy="500" r="8" fill="#5ab86b" opacity="0.6"/>
+                        <circle cx="28" cy="650" r="7" fill="#6bcf7f" opacity="0.7"/>
+                        <circle cx="20" cy="800" r="8" fill="#5ab86b" opacity="0.6"/>
+                        <circle cx="25" cy="950" r="9" fill="#6bcf7f" opacity="0.7"/>
+                        <circle cx="15" cy="1100" r="8" fill="#5ab86b" opacity="0.6"/>
+                        <circle cx="28" cy="1250" r="7" fill="#6bcf7f" opacity="0.7"/>
+                        
+                        <!-- Right side grass tufts -->
+                        <circle cx="180" cy="120" r="8" fill="#6bcf7f" opacity="0.7"/>
+                        <circle cx="185" cy="250" r="7" fill="#5ab86b" opacity="0.6"/>
+                        <circle cx="175" cy="380" r="9" fill="#6bcf7f" opacity="0.7"/>
+                        <circle cx="182" cy="530" r="8" fill="#5ab86b" opacity="0.6"/>
+                        <circle cx="172" cy="680" r="7" fill="#6bcf7f" opacity="0.7"/>
+                        <circle cx="180" cy="830" r="8" fill="#5ab86b" opacity="0.6"/>
+                        <circle cx="175" cy="980" r="9" fill="#6bcf7f" opacity="0.7"/>
+                        <circle cx="185" cy="1130" r="8" fill="#5ab86b" opacity="0.6"/>
+                        <circle cx="172" cy="1280" r="7" fill="#6bcf7f" opacity="0.7"/>
+                    </g>
+                    <path class="cultivation-ribbon" id="cultivationRibbon" d="" fill="none" stroke="#4ecdc4" stroke-width="20" stroke-linecap="round" filter="url(#glowVertical)"/>
+                </svg>
+                <div class="goal-nodes-vertical" id="goalNodesVertical"></div>
+            </div>
+            <button type="button" class="leaderboard-btn" onclick="game.showModes()">Back to Menu</button>
+        </div>
+
+        <!-- Game Stats -->
+        <div id="gameScreen" class="game-screen">
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-label">Score</div>
+                    <div class="stat-value" id="score">0</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label" id="movesLabel">Moves</div>
+                    <div class="stat-value" id="moves">20</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Best</div>
+                    <div class="stat-value" id="best">0</div>
+                </div>
+            </div>
+
+            <div id="goalDisplay" class="goal-display">
+                <div class="goal-header">
+                    <span class="goal-level" id="goalLevelLabel">Level 1</span>
+                </div>
+                <div class="goal-text" id="goalText"></div>
+                <div class="goal-progress">
+                    <div class="goal-bar" id="goalBar"></div>
+                </div>
+            </div>
+
+            <div class="game-board" id="gameBoard"></div>
+
+            <div class="controls">
+                <button type="button" class="btn-new" onclick="game.showModes()">Back to Menu</button>
+                <button type="button" class="btn-new" onclick="game.showLeaderboard(game.mode)">👑 Leaderboard</button>
+            </div>
+
+            <div class="message" id="message"></div>
+        </div>
+
+        <!-- Leaderboard Screen -->
+        <div id="leaderboardScreen" class="leaderboard-screen">
+            <p class="leaderboard-title">📊 Leaderboard</p>
+            
+            <div class="mode-tabs">
+                <button type="button" class="mode-tab active" onclick="game.switchLeaderboardMode('classic')">Classic</button>
+                <button type="button" class="mode-tab" onclick="game.switchLeaderboardMode('timeAttack')">⏱️ Time Attack</button>
+                <button type="button" class="mode-tab" onclick="game.switchLeaderboardMode('goalMode')">🎯 Goal</button>
+            </div>
+
+            <div class="leaderboard-content">
+                <div id="leaderboardChain" class="leaderboard-chain"></div>
+            </div>
+
+            <div class="controls">
+                <button type="button" class="btn-new" onclick="game.showModes()">Back to Menu</button>
+                <button type="button" class="btn-new" onclick="game.backToGame()" id="backToGameBtn">Back to Game</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav">
+        <button class="nav-btn active" onclick="game.showModes()" title="Home">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">Home</span>
+        </button>
+        <button class="nav-btn" onclick="game.showLeaderboard(game.mode)" title="Leaderboard">
+            <span class="nav-icon">👑</span>
+            <span class="nav-label">Ranking</span>
+        </button>
+        <button class="nav-btn" onclick="game.toggleSettings(event)" title="Settings">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">Settings</span>
+        </button>
+    </nav>
+
+    <script>
+        // Player name UI and optional Firebase sync
+        function savePlayerNameToFirebaseIfAvailable(name) {
+            try {
+                if (window.firebase && firebase.database) {
+                    const db = firebase.database();
+                    // push a lightweight record for this player (non-unique)
+                    db.ref('players').push({ name: name, timestamp: Date.now() });
+                }
+            } catch (e) {
+                // ignore if firebase not configured
+                console.warn('Firebase save skipped:', e);
+            }
+        }
+
+        function initPlayerNameUI() {
+            const display = document.getElementById('playerNameDisplay');
+            const input = document.getElementById('playerNameInput');
+            const btn = document.getElementById('savePlayerNameBtn');
+
+            const stored = localStorage.getItem('cyFurPlayerName') || '';
+            if (input) input.value = stored;
+            if (display) display.textContent = stored ? `Player: ${stored}` : '';
+
+            if (btn) btn.addEventListener('click', () => {
+                const val = (input.value || '').trim();
+                if (!val) return;
+                localStorage.setItem('cyFurPlayerName', val);
+                if (display) display.textContent = `Player: ${val}`;
+                savePlayerNameToFirebaseIfAvailable(val);
+                // close settings modal automatically
+                const modal = document.getElementById('settingsModal');
+                if (modal) modal.style.display = 'none';
+            });
+        }
+
+        // Initialize game with loading screen
+        document.addEventListener('DOMContentLoaded', () => {
+            const loadingScreen = document.getElementById('loadingScreen');
+            setTimeout(() => {
+                loadingScreen.style.opacity = '0';
+                loadingScreen.style.pointerEvents = 'none';
+            }, 2800);
+            
+            // initialize player name UI
+            initPlayerNameUI();
+
+            window.game = new CandyCrush();
+            window.setGameOverImage = (src) => window.game.uiManager.setResultImage(src);
+        });
+    </script>
+</body>
+</html>
